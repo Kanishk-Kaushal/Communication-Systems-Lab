@@ -1,80 +1,112 @@
-clc;
-clear all;
-close all;
-cvx=input('Enter Length of Random Bit Sequence:');
-d=round(rand(1,cvx));
-l=cvx;
-x=0:0.01:l*2*pi;
-cc=cos(x);
-cs=cos(x+pi/2);
-k=length(cc);
-k1=k/l;
-t=1;
-for i=1:l
-  if(d(i)==0)
-    d(i)=-1;
-    i=i+1;
-  end  
-end
-
-i=1;
-j=1;% To segrigate odd bit streams and even bit streams
-while (i<l) && (j<l) %half strem with double symbol duration
-    dd1(j)=d(i);
-    dd1(j+1)=d(i);
-    dd2(j)=d(i+1);
-    dd2(j+1)=d(i+1);
-    j=j+2;
-    i=i+2;
-end% to make bit streams cycle equivalent to sinusoidal waveformt=1;
-for i=1:l
-    for j=1:k1 %k1 sample with 1 sine period
-        dd(t)=d(i);
-        d1(t)=dd1(i);
-        d2(t)=dd2(i);
-        t=t+1;
-        j=j+1;
-    end
-    i=i+1;
-end
-
-subplot(6,1,1);
-stairs(dd);
-axis([0 t -2 2]);
-title('Imput Bit Stream');
-subplot(6,1,2);
-stairs(d1);
-axis([0 t -2 2]);
-title('Odd Bit Stream');
-subplot(6,1,3);
-stairs(d2);
-axis([0 t -2 2]);
-title('Even Bit Stream');
-
-len=length(d1);
-if(k<len)
-   len=k;
-end
-
-for i=1:len
-    qcc(i)=cc(i)*d1(i);% odd streams multiplied with I waveform
-    qcs(i)=cs(i)*d2(i);% even streams multiplied with Q waveform
-    i=i+1;
-end
-
-subplot(6,1,4);
-plot(qcc);
-axis([0 len -2 2]);
-title('Modulated Wave of I-Component');
-subplot(6,1,5);
-plot(qcs);
-axis([0 len -2 2]);
-title('Modulated Wave of Q-Component');
-
-qp=qcc+qcs; % QPSK output from Adder
-subplot(6,1,6);
-plot(qp);
-axis([0 len -2 2]);
-title('QPSK WAVEFORM');
-figure, scatter(dd1,dd2,40,'*r');
-title('Constellation Diagram of QPSK');
+%clear; %clear all stored variables 
+N=100; %number of data bits 
+noiseVariance = 0.5; %Noise variance of AWGN channel 
+data=randn(1,N)>=0; %Generate uniformly distributed random data 
+Rb=1e3; %bit rate 
+amplitude=1; % Amplitude of NRZ data 
+[time,nrzData,Fs]=NRZ_Encoder(data,Rb,amplitude,'Polar'); 
+Tb=1/Rb; 
+subplot(4,2,1); 
+stem(data); 
+xlabel('Samples'); 
+ylabel('Amplitude'); 
+title('Input Binary Data'); 
+axis([0,N,-0.5,1.5]); 
+subplot(4,2,3); 
+plotHandle=plot(time,nrzData); 
+xlabel('Time'); 
+ylabel('Amplitude'); 
+title('Polar NRZ encoded data'); 
+set(plotHandle,'LineWidth',2.5); 
+maxTime=max(time); 
+maxAmp=max(nrzData); 
+minAmp=min(nrzData); 
+axis([0,maxTime,minAmp-1,maxAmp+1]); 
+grid on; 
+Fc=2*Rb; 
+osc1 = sin(2*pi*Fc*time);
+osc2= cos(2*pi*Fc*time);
+%BPSK modulation 
+qpskModulated1 = nrzData.*osc1;
+qpskModulated2 = nrzData.*osc2;
+subplot(4,2,5);
+plot(time,(qpskModulated1+qpskModulated2)); 
+xlabel('Time'); 
+ylabel('Amplitude'); 
+title('QPSK Modulated Data');
+% subplot(4,2,7);
+% plot(time,qpskModulated2); 
+% xlabel('Time'); 
+% ylabel('Amplitude'); 
+% title('QPSK Modulated Data2');
+maxTime=max(time); 
+maxAmp=max(nrzData); 
+minAmp=min(nrzData); 
+axis([0,maxTime,minAmp-1,maxAmp+1]);
+%plotting the PSD of BPSK modulated data 
+subplot(4,2,7); 
+h=spectrum.welch; %Welch spectrum estimator 
+Hpsd = psd(h,(qpskModulated1+qpskModulated2),'Fs',Fs); 
+plot(Hpsd); 
+title('PSD of QPSK modulated Data'); 
+%-------------------------------------------
+%Adding Channel Noise 
+%-------------------------------------------
+noise1 = sqrt(noiseVariance)*randn(1,length(qpskModulated1));
+noise2 = sqrt(noiseVariance)*randn(1,length(qpskModulated2));
+received1 = qpskModulated1 + noise1;
+received2 = qpskModulated2 + noise2;
+subplot(4,2,2); 
+plot(time,(received1+received2)); 
+xlabel('Time'); 
+ylabel('Amplitude'); 
+title('QPSK Modulated Data with AWGN noise'); 
+%BPSK Receiver
+%-------------------------------------------
+%Multiplying the received signal with reference Oscillator 
+v1 = received1.*osc1;
+v2 = received1.*osc2;
+%Integrator 
+integrationBase = 0:1/Fs:Tb-1/Fs; 
+for i = 0:(length(v1)/(Tb*Fs))-1
+y(i+1)=trapz(integrationBase,v1(int32(i*Tb*Fs+1):int32((i+1)*Tb*Fs))); 
+end 
+%Threshold Comparator 
+estimatedBits=(y>=0); 
+subplot(4,2,4); 
+stem(estimatedBits); 
+xlabel('Samples'); 
+ylabel('Amplitude'); 
+title('Estimated Binary Data'); 
+axis([0,N,-0.5,1.5]); 
+%------------------------------------------
+%Bit Error rate Calculation 
+BER = sum(xor(data,estimatedBits))/length(data); 
+%Constellation Mapper at Transmitter side 
+subplot(4,2,6); 
+Q1 = zeros(1,length(nrzData)); %No Quadrature Component for BPSK 
+Q2 = ones(1,length(nrzData));
+scatter(nrzData,Q1);
+hold on;
+%figure(2);
+subplot(4,2,6);
+scatter(nrzData,Q2);
+xlabel('Inphase Component'); 
+ylabel('Quadrature Phase component'); 
+title('QPSK Constellation at Transmitter'); 
+axis([-1.5,1.5,-1,1]); 
+%constellation Mapper at receiver side 
+subplot(4,2,8); 
+Q1 = zeros(1,length(y)); %No Quadrature Component for BPSK
+Q2 = ones(1,length(y));
+stem(y/max(y),Q1);
+hold on;
+%figure(3);
+subplot(4,2,8);
+scatter(y/max(y),Q2);
+%stem(y/max(y),Q); 
+xlabel('Inphase Component'); 
+ylabel('Quadrature Phase component'); 
+title(['QPSK Constellation at Receiver when AWGN Noise Variance =',num2str(noiseVariance)]); 
+axis([-1.5,1.5,-1,1]);
+           
