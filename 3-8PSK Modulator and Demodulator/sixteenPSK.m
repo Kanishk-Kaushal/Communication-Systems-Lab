@@ -32,8 +32,9 @@ EbN0 = 10.^(i/10); %Converting Eb/N0 dB value to linear scale
 noiseSigma = sqrt(2)*sqrt(1./(2*Rm*Rc*EbN0)); %Standard deviation for AWGN Noise 
 %Creating a complex noise for adding with 16-PSK s signal 
 %Noise is complex since 16-PSK is in complex representation 
-n = noiseSigma*(randn(1,length(s))+1i*randn(1,length(s)))'; 
-y = s + n; 
+%n = noiseSigma*(randn(1,length(s))+1i*randn(1,length(s)))'; 
+y = raylrnd(s);
+%y = raylrnd(s)*raylrnd(s);
 plot(real(y),imag(y),'r*');hold on;
 plot(real(s),imag(s),'ko','MarkerFaceColor','g','MarkerSize',7);hold off; 
 title(['Constellation plots - ideal 16-PSK (green) Vs Noisy y signal for EbN0dB =',num2str(i),'dB']); 
